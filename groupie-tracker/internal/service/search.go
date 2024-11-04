@@ -146,54 +146,69 @@ func (s *SearchService) SearchArtists(query string, filters models.FilterParams)
 }
 
 func (s *SearchService) matchesFilters(artist models.Artist, filters models.FilterParams) bool {
-	// Creation year filter
-	if artist.CreationDate < filters.CreationYearMin ||
-		artist.CreationDate > filters.CreationYearMax {
-		return false
-	}
+    // Get locations data for the artist
+    cachedData, err := s.cache.GetCachedData()
+    if err != nil {
+        return false
+    }
 
-	// First album year filter
-	firstAlbumYear, err := parseFirstAlbumYear(artist.FirstAlbum)
-	if err != nil || firstAlbumYear < filters.FirstAlbumYearMin ||
-		firstAlbumYear > filters.FirstAlbumYearMax {
-		return false
-	}
+    // Get locations data for the artist
+    var artistLocations []string
+    for _, loc := range cachedData.LocationsData.Index {
+        if loc.ID == artist.ID {
+            artistLocations = loc.Locations
+            break
+        }
+    }
 
-	// Members filter
-	if len(filters.Members) > 0 {
-		memberCount := len(artist.Members)
-		found := false
-		for _, count := range filters.Members {
-			if count == memberCount {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
+    // Creation year filter
+    if artist.CreationDate < filters.CreationYearMin ||
+        artist.CreationDate > filters.CreationYearMax {
+        return false
+    }
 
-	// Locations filter
-	if len(filters.Locations) > 0 {
-		found := false
-		for _, filterLoc := range filters.Locations {
-			for _, loc := range artist.Locations {
-				if strings.Contains(strings.ToLower(string(loc)), strings.ToLower(filterLoc)) {
-					found = true
-					break
-				}
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
+    // First album year filter
+    firstAlbumYear, err := parseFirstAlbumYear(artist.FirstAlbum)
+    if err != nil || firstAlbumYear < filters.FirstAlbumYearMin ||
+        firstAlbumYear > filters.FirstAlbumYearMax {
+        return false
+    }
 
-	return true
+    // Members filter
+    if len(filters.Members) > 0 {
+        memberCount := len(artist.Members)
+        found := false
+        for _, count := range filters.Members {
+            if count == memberCount {
+                found = true
+                break
+            }
+        }
+        if !found {
+            return false
+        }
+    }
+
+    // Locations filter
+    if len(filters.Locations) > 0 && len(artistLocations) > 0 {
+        found := false
+        for _, filterLoc := range filters.Locations {
+            for _, loc := range artistLocations {
+                if strings.Contains(strings.ToLower(loc), strings.ToLower(filterLoc)) {
+                    found = true
+                    break
+                }
+            }
+            if found {
+                break
+            }
+        }
+        if !found {
+            return false
+        }
+    }
+
+    return true
 }
 
 func (s *SearchService) matchesArtist(artist models.Artist, query string, locations []string) bool {
@@ -321,4 +336,19 @@ func (s *SearchService) geocode(address string) (models.GeoLocation, error) {
 		Lon:     result.Features[0].Center[0],
 		Lat:     result.Features[0].Center[1],
 	}, nil
+}
+
+// Add this helper function
+func (s *SearchService) GetLocationsForArtist(artistID int) []string {
+	data, err := s.cache.GetCachedData()
+	if err != nil {
+		return nil
+	}
+
+	for _, loc := range data.LocationsData.Index {
+		if loc.ID == artistID {
+			return loc.Locations
+		}
+	}
+	return nil
 }

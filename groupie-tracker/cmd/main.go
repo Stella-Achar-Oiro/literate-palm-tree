@@ -26,7 +26,7 @@ func main() {
 	logger = log.New(os.Stdout, "GROUPIE-TRACKER: ", log.Ldate|log.Ltime|log.Lshortfile)
 
 	// Initialize models package with required constants
-	models.InitConstants(models.GetMapboxAccessToken(), models.GetMapboxGeocodingAPI())
+	models.InitConstants(service.GetMapboxAccessToken(), service.GetMapboxGeocodingAPI())
 	logger.Println("Models initialized with Mapbox constants")
 
 	// Initialize services
@@ -77,7 +77,7 @@ func main() {
 	logger.Println("Routes and static file server set up")
 
 	// Start server
-	port := ":8080"
+	port := ":8000"
 	logger.Printf("Server starting on %s", port)
 	server := &http.Server{
 		Addr:         port,

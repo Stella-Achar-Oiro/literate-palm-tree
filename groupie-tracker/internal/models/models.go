@@ -138,14 +138,34 @@ func GetMapboxGeocodingAPI() string {
 
 // Validate validates the filter parameters
 func (f *FilterParams) Validate() error {
-	if f.CreationYearMin > f.CreationYearMax {
-		return fmt.Errorf("creation year minimum cannot be greater than maximum")
-	}
-	if f.FirstAlbumYearMin > f.FirstAlbumYearMax {
-		return fmt.Errorf("first album year minimum cannot be greater than maximum")
-	}
-	return nil
+    currentYear := time.Now().Year()
+    
+    // Validate creation year range
+    if f.CreationYearMin < 1950 || f.CreationYearMin > currentYear {
+        return fmt.Errorf("invalid creation year minimum: must be between 1950 and %d", currentYear)
+    }
+    if f.CreationYearMax < f.CreationYearMin || f.CreationYearMax > currentYear {
+        return fmt.Errorf("invalid creation year maximum: must be between minimum and %d", currentYear)
+    }
+
+    // Validate first album year range
+    if f.FirstAlbumYearMin < 1950 || f.FirstAlbumYearMin > currentYear {
+        return fmt.Errorf("invalid first album year minimum: must be between 1950 and %d", currentYear)
+    }
+    if f.FirstAlbumYearMax < f.FirstAlbumYearMin || f.FirstAlbumYearMax > currentYear {
+        return fmt.Errorf("invalid first album year maximum: must be between minimum and %d", currentYear)
+    }
+
+    // Validate members
+    for _, count := range f.Members {
+        if count < 1 {
+            return fmt.Errorf("invalid member count: must be positive")
+        }
+    }
+
+    return nil
 }
+
 
 // ToJSON converts a struct to JSON string
 func ToJSON(v interface{}) (string, error) {
