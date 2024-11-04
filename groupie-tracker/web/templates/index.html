@@ -1,0 +1,57 @@
+<!-- web/templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groupie Tracker</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+</head>
+<body>
+    <div class="container">
+        <h1>Groupie Tracker</h1>
+
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Search artists, members, locations...">
+            <div id="suggestions" role="listbox" aria-label="Search suggestions"></div>
+        </div>
+
+        <div id="filter-container">
+            <div class="filter-row">
+                <label for="creation-year">Career Starting Year:</label>
+                <input type="range" id="creation-year" class="range-slider">
+                <span id="creation-year-display" class="year-display">1950</span>
+            </div>
+
+            <div class="filter-row">
+                <label for="first-album-year">First Album Year:</label>
+                <input type="range" id="first-album-year" class="range-slider">
+                <span id="first-album-year-display" class="year-display">1950</span>
+            </div>
+
+            <div class="filter-row">
+                <label>Nº Members:</label>
+                <div id="member-checkboxes"></div>
+            </div>
+
+            <div class="filter-row">
+                <label>Locations:</label>
+                <div id="location-checkboxes"></div>
+            </div>
+        </div>
+
+        <div id="results-container"></div>
+    </div>
+
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div id="error-message" class="error-message" role="alert" aria-live="assertive"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!-- web/templates/artist-details.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artist Details - Groupie Tracker</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-button">
+            <i class="fas fa-arrow-left"></i> Back to Artists
+        </a>
+
+        <div id="artist-details" class="artist-details-page"></div>
+        
+        <div id="map" class="details-map"></div>
+
+        <div id="map-legend" class="details-map-legend">
+            <h4>Map Instructions:</h4>
+            <ul>
+                <li>Click on a marker to see location details</li>
+                <li>Hover over markers to highlight them</li>
+                <li>Use the close button (×) to dismiss popups</li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div id="error-message" class="error-message" role="alert" aria-live="assertive"></div>
+
+    <script src="/static/js/artist-details.js"></script>
+</body>
+</html>
