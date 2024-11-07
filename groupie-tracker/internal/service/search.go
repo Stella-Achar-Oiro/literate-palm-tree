@@ -35,35 +35,55 @@ func (s *SearchService) GetSuggestions(query string) ([]models.Suggestion, error
 	queryLower := strings.ToLower(strings.TrimSpace(query))
 	suggestions := make(map[string]models.Suggestion)
 
-	// Create locations lookup map
-	locationMap := make(map[int][]string)
-	for _, loc := range data.LocationsData.Index {
-		locationMap[loc.ID] = loc.Locations
+	// Helper function to generate unique keys
+	makeKey := func(text, type_ string) string {
+		return fmt.Sprintf("%s|%s", text, type_)
+	}
+
+	// Helper function to check if string contains parts of query
+	containsQueryParts := func(text string) bool {
+		text = strings.ToLower(text)
+		queryParts := strings.Fields(queryLower)
+		for _, part := range queryParts {
+			if !strings.Contains(text, part) {
+				return false
+			}
+		}
+		return true
 	}
 
 	for _, artist := range data.ArtistsData {
 		// Artist name suggestions (case insensitive)
-		if strings.Contains(strings.ToLower(artist.Name), queryLower) {
-			suggestions[artist.Name] = models.Suggestion{
+		if containsQueryParts(artist.Name) {
+			key := makeKey(artist.Name, "artist")
+			suggestions[key] = models.Suggestion{
 				Text: artist.Name,
-				Type: "artist",
+				Type: "artist/band",
 			}
 		}
 
-		// Members suggestions
+		// Members suggestions - check each part of member name
 		for _, member := range artist.Members {
-			if strings.Contains(strings.ToLower(member), queryLower) {
-				suggestions[member] = models.Suggestion{
+			if containsQueryParts(member) {
+				key := makeKey(member, "member")
+				suggestions[key] = models.Suggestion{
 					Text: member,
 					Type: "member",
+				}
+				// Also add the artist for member searches
+				artistKey := makeKey(artist.Name, "artist")
+				suggestions[artistKey] = models.Suggestion{
+					Text: artist.Name,
+					Type: "artist/band",
 				}
 			}
 		}
 
 		// Creation date suggestions
 		creationDate := strconv.Itoa(artist.CreationDate)
-		if strings.Contains(creationDate, query) {
-			suggestions[creationDate] = models.Suggestion{
+		if strings.Contains(creationDate, queryLower) {
+			key := makeKey(creationDate, "creation date")
+			suggestions[key] = models.Suggestion{
 				Text: creationDate,
 				Type: "creation date",
 			}
@@ -71,21 +91,28 @@ func (s *SearchService) GetSuggestions(query string) ([]models.Suggestion, error
 
 		// First album suggestions
 		if strings.Contains(strings.ToLower(artist.FirstAlbum), queryLower) {
-			suggestions[artist.FirstAlbum] = models.Suggestion{
+			key := makeKey(artist.FirstAlbum, "first album")
+			suggestions[key] = models.Suggestion{
 				Text: artist.FirstAlbum,
 				Type: "first album",
 			}
 		}
 
-		// Location suggestions
-		if locations, ok := locationMap[artist.ID]; ok {
-			for _, location := range locations {
-				location = strings.TrimSpace(location)
-				if strings.Contains(strings.ToLower(location), queryLower) {
-					suggestions[location] = models.Suggestion{
-						Text: location,
-						Type: "location",
-					}
+		// Location suggestions with improved matching
+		locations := s.GetLocationsForArtist(artist.ID)
+		for _, location := range locations {
+			location = strings.TrimSpace(location)
+			if containsQueryParts(location) {
+				key := makeKey(location, "location")
+				suggestions[key] = models.Suggestion{
+					Text: location,
+					Type: "location",
+				}
+				// Also add the artist for location searches
+				artistKey := makeKey(artist.Name, "artist")
+				suggestions[artistKey] = models.Suggestion{
+					Text: artist.Name,
+					Type: "artist/band",
 				}
 			}
 		}
@@ -97,18 +124,38 @@ func (s *SearchService) GetSuggestions(query string) ([]models.Suggestion, error
 		result = append(result, suggestion)
 	}
 
-	// Sort by type and then text
+	// sorting with priorities
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].Type == result[j].Type {
-			return result[i].Text < result[j].Text
+		typePriority := map[string]int{
+			"artist/band":   1,
+			"member":        2,
+			"location":      3,
+			"creation date": 4,
+			"first album":   5,
 		}
-		return result[i].Type < result[j].Type
+
+		// First compare by exact match
+		iExact := strings.ToLower(result[i].Text) == queryLower
+		jExact := strings.ToLower(result[j].Text) == queryLower
+		if iExact != jExact {
+			return iExact
+		}
+
+		// Then by type priority
+		if result[i].Type != result[j].Type {
+			return typePriority[result[i].Type] < typePriority[result[j].Type]
+		}
+
+		// Finally by text length and alphabetically
+		if len(result[i].Text) != len(result[j].Text) {
+			return len(result[i].Text) < len(result[j].Text)
+		}
+		return result[i].Text < result[j].Text
 	})
 
 	return result, nil
 }
 
-// SearchArtists searches for artists based on query and filters
 func (s *SearchService) SearchArtists(query string, filters models.FilterParams) ([]models.Artist, error) {
 	data, err := s.cache.GetCachedData()
 	if err != nil {
@@ -116,13 +163,8 @@ func (s *SearchService) SearchArtists(query string, filters models.FilterParams)
 	}
 
 	queryLower := strings.ToLower(strings.TrimSpace(query))
+	queryParts := strings.Fields(queryLower)
 	var results []models.Artist
-
-	// Create locations lookup map
-	locationMap := make(map[int][]string)
-	for _, loc := range data.LocationsData.Index {
-		locationMap[loc.ID] = loc.Locations
-	}
 
 	for _, artist := range data.ArtistsData {
 		// Skip if doesn't match filters
@@ -136,8 +178,8 @@ func (s *SearchService) SearchArtists(query string, filters models.FilterParams)
 			continue
 		}
 
-		// Check various fields
-		if s.matchesArtist(artist, queryLower, locationMap[artist.ID]) {
+		// Check if matches any search criteria
+		if s.matchesArtist(artist, queryParts) {
 			results = append(results, artist)
 		}
 	}
@@ -145,103 +187,116 @@ func (s *SearchService) SearchArtists(query string, filters models.FilterParams)
 	return results, nil
 }
 
-func (s *SearchService) matchesFilters(artist models.Artist, filters models.FilterParams) bool {
-    // Get locations data for the artist
-    cachedData, err := s.cache.GetCachedData()
-    if err != nil {
-        return false
-    }
+func (s *SearchService) matchesArtist(artist models.Artist, queryParts []string) bool {
+	// Helper function to check if text contains all query parts
+	containsAllParts := func(text string) bool {
+		text = strings.ToLower(text)
+		for _, part := range queryParts {
+			if !strings.Contains(text, part) {
+				return false
+			}
+		}
+		return true
+	}
 
-    // Get locations data for the artist
-    var artistLocations []string
-    for _, loc := range cachedData.LocationsData.Index {
-        if loc.ID == artist.ID {
-            artistLocations = loc.Locations
-            break
-        }
-    }
-
-    // Creation year filter
-    if artist.CreationDate < filters.CreationYearMin ||
-        artist.CreationDate > filters.CreationYearMax {
-        return false
-    }
-
-    // First album year filter
-    firstAlbumYear, err := parseFirstAlbumYear(artist.FirstAlbum)
-    if err != nil || firstAlbumYear < filters.FirstAlbumYearMin ||
-        firstAlbumYear > filters.FirstAlbumYearMax {
-        return false
-    }
-
-    // Members filter
-    if len(filters.Members) > 0 {
-        memberCount := len(artist.Members)
-        found := false
-        for _, count := range filters.Members {
-            if count == memberCount {
-                found = true
-                break
-            }
-        }
-        if !found {
-            return false
-        }
-    }
-
-    // Locations filter
-    if len(filters.Locations) > 0 && len(artistLocations) > 0 {
-        found := false
-        for _, filterLoc := range filters.Locations {
-            for _, loc := range artistLocations {
-                if strings.Contains(strings.ToLower(loc), strings.ToLower(filterLoc)) {
-                    found = true
-                    break
-                }
-            }
-            if found {
-                break
-            }
-        }
-        if !found {
-            return false
-        }
-    }
-
-    return true
-}
-
-func (s *SearchService) matchesArtist(artist models.Artist, query string, locations []string) bool {
-	// Check name
-	if strings.Contains(strings.ToLower(artist.Name), query) {
+	// Check name (case insensitive)
+	if containsAllParts(artist.Name) {
 		return true
 	}
 
 	// Check members
 	for _, member := range artist.Members {
-		if strings.Contains(strings.ToLower(member), query) {
+		if containsAllParts(member) {
 			return true
 		}
 	}
 
 	// Check creation date
-	if query == strconv.Itoa(artist.CreationDate) {
+	creationDate := strconv.Itoa(artist.CreationDate)
+	if len(queryParts) == 1 && strings.Contains(creationDate, queryParts[0]) {
 		return true
 	}
 
 	// Check first album
-	if strings.Contains(strings.ToLower(artist.FirstAlbum), query) {
+	if containsAllParts(artist.FirstAlbum) {
 		return true
 	}
 
 	// Check locations
+	locations := s.GetLocationsForArtist(artist.ID)
 	for _, location := range locations {
-		if strings.Contains(strings.ToLower(location), query) {
+		if containsAllParts(location) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func (s *SearchService) matchesFilters(artist models.Artist, filters models.FilterParams) bool {
+	// Get locations data for the artist
+	cachedData, err := s.cache.GetCachedData()
+	if err != nil {
+		return false
+	}
+
+	// Get locations data for the artist
+	var artistLocations []string
+	for _, loc := range cachedData.LocationsData.Index {
+		if loc.ID == artist.ID {
+			artistLocations = loc.Locations
+			break
+		}
+	}
+
+	// Creation year filter
+	if artist.CreationDate < filters.CreationYearMin ||
+		artist.CreationDate > filters.CreationYearMax {
+		return false
+	}
+
+	// First album year filter
+	firstAlbumYear, err := parseFirstAlbumYear(artist.FirstAlbum)
+	if err != nil || firstAlbumYear < filters.FirstAlbumYearMin ||
+		firstAlbumYear > filters.FirstAlbumYearMax {
+		return false
+	}
+
+	// Members filter
+	if len(filters.Members) > 0 {
+		memberCount := len(artist.Members)
+		found := false
+		for _, count := range filters.Members {
+			if count == memberCount {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// Locations filter
+	if len(filters.Locations) > 0 && len(artistLocations) > 0 {
+		found := false
+		for _, filterLoc := range filters.Locations {
+			for _, loc := range artistLocations {
+				if strings.Contains(strings.ToLower(loc), strings.ToLower(filterLoc)) {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parseFirstAlbumYear(firstAlbum string) (int, error) {
